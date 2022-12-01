@@ -1,0 +1,32 @@
+name: Pull request
+
+on:
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Prepare
+        run: |
+          sudo apt-get install -q -y --no-install-suggests --no-install-recommends googletest
+          cd /usr/src/googletest
+          sudo cmake . && sudo make -j && sudo make install
+          cd -
+
+      - name: Download libpens
+        env:
+          PEN_FILE_SERVER: ${{secrets.PEN_FILE_SERVER}}
+        run: .github/bin/prepare.sh
+
+      - name: Build
+        run: .github/bin/build_dev.sh
+
+      - name: Run tests
+        run: make check
+
