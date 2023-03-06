@@ -1,0 +1,88 @@
+name: Deploy
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download libpens
+        env:
+          PEN_FILE_SERVER: ${{secrets.PEN_FILE_SERVER}}
+        run: .github/bin/ftp_tool.sh -d
+
+      - name: Build
+        run: .github/bin/build.sh
+
+      - name: Pack
+        run: .github/bin/pack.sh
+
+      - name: Deploy
+        env:
+          UPLOAD_SECRET: ${{secrets.UPLOAD_SECRET}}
+          PEN_FILE_SERVER: ${{secrets.PEN_FILE_SERVER}}
+        run: .github/bin/ftp_tool.sh -u
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download libpens
+        env:
+          PEN_FILE_SERVER: ${{secrets.PEN_FILE_SERVER}}
+        run: .github/bin/ftp_tool.sh -d
+
+      - name: Build
+        run: .github/bin/build.sh
+
+      - name: Pack
+        run: .github/bin/pack.sh
+
+      - name: Deploy
+        env:
+          UPLOAD_SECRET: ${{secrets.UPLOAD_SECRET}}
+          PEN_FILE_SERVER: ${{secrets.PEN_FILE_SERVER}}
+        run: .github/bin/ftp_tool.sh -u
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Prepare
+        env:
+          PEN_FILE_SERVER: ${{secrets.PEN_FILE_SERVER}}
+        run: |
+          .github/bin/ftp_tool.sh -d
+          .github/bin/ftp_tool.sh -g
+        shell: bash
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v1.1.3
+
+      - name: Configure
+        run: .github/bin/build.sh
+        shell: bash
+
+      - name: Build
+        run: msbuild ./build/ALL_BUILD.vcxproj /property:Configuration=Release
+
+      - name: Install
+        run: msbuild ./build/INSTALL.vcxproj /Property:Configuration=Release
+
+      - name: Pack
+        run: .github/bin/pack.sh
+        shell: bash
+
+      - name: Deploy
+        env:
+          UPLOAD_SECRET: ${{secrets.UPLOAD_SECRET}}
+          PEN_FILE_SERVER: ${{secrets.PEN_FILE_SERVER}}
+        run: .github/bin/ftp_tool.sh -u
+        shell: bash
