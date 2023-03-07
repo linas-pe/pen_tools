@@ -5,9 +5,35 @@ on:
     branches: [ "main" ]
 
 jobs:
+  scan:
+    name: SonarCloud Scan
+    runs-on: ubuntu-latest
+    env:
+      BUILD_WRAPPER_OUT_DIR: build_wrapper_output_directory # Directory where build-wrapper output will be placed
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
+      - name: Download libpens
+        env:
+          PEN_FILE_SERVER: ${{secrets.PEN_FILE_SERVER}}
+        run: .github/bin/ftp_tool.sh -d
+      - name: Install sonar-scanner and build-wrapper
+        uses: SonarSource/sonarcloud-github-c-cpp@v1
+      - name: Run build-wrapper
+        run: |
+          mkdir build
+          cmake -S . -B build -DPEN_LIBRARY_PATH=${GITHUB_WORKSPACE}/libpen -DCMAKE_BUILD_TYPE=Release
+          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cmake --build build/ --config Release
+      - name: Run sonar-scanner
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONARCLOUD_TOKEN }} # Put the name of your token here
+        run: |
+          sonar-scanner --define sonar.cfamily.build-wrapper-output="${{ env.BUILD_WRAPPER_OUT_DIR }}"
   linux:
     runs-on: ubuntu-latest
-
+    needs: [scan]
     steps:
       - uses: actions/checkout@v3
 
@@ -30,6 +56,7 @@ jobs:
 
   macos:
     runs-on: macos-latest
+    needs: [scan]
     steps:
       - uses: actions/checkout@v3
 
@@ -52,6 +79,7 @@ jobs:
 
   windows:
     runs-on: windows-latest
+    needs: [scan]
     steps:
       - uses: actions/checkout@v3
 

@@ -11,14 +11,14 @@ function try_curl() {
   for i in $(seq 1 5); do
     code=$(curl $@)
     result=$?
-    if [ $result -eq 0 ]; then
+    if [ "$result" -eq 0 ]; then
       break
     fi
   done
-  if [ $result -ne 0 ]; then
+  if [ "$result" -ne 0 ]; then
     exit 1
   fi
-  echo $code
+  echo "$code"
 }
 
 function upload() {
@@ -45,13 +45,13 @@ function download() {
       echo "Download ${target} ..."
       try_curl --retry 5 "${URL}/app/${branch_name}/${target}" -o "${target}"
       if [ "$os" == "windows" ]; then
-        7z x ${target} -olibpen -aoa
+        7z x "${target}" -olibpen -aoa
       else
         tar xf "${target}" -C libpen || exit 1
       fi
       if [ "${item}" == "pen_utils" ]; then
         mkdir -p include
-        ln -s ${GITHUB_WORKSPACE}/libpen/include/pen_utils/pen.cmake include
+        ln -s "${GITHUB_WORKSPACE}/libpen/include/pen_utils/pen.cmake" include
       fi
     fi
   done < $depfile
