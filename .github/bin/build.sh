@@ -3,26 +3,23 @@
 source .github/bin/common.sh
 
 build_type=$(basename "$0")
-build_args="-B build -S . -DPEN_LIBRARY_PATH=${GITHUB_WORKSPACE}/libpen"
+build_args="-B build -S ."
 if [ "$build_type" == "build_dev.sh" ]; then
-    build_args="${build_args} -DCMAKE_BUILD_TYPE=Debug -DPEN_LOCAL_GTEST=ON"
+    build_args="${build_args} -DCMAKE_BUILD_TYPE=Debug"
 else
-    build_args="${build_args} -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${workdir}"
+    build_args="${build_args} -DCMAKE_BUILD_TYPE=Release"
 fi
 
 cmake ${build_args} || exit 1
-
-if [ "$os" == "windows" ]; then
-    echo not build for windows
-else
-    make -C build VERBOSE=1 || exit 1
-fi
+cmake --build build || exit 1
 
 if [ "$build_type" == "build.sh" ]; then
+    cmake --build build --target package || exit 1
+else
     if [ "$os" == "windows" ]; then
-        echo no install for windows
+        cmake --build build --target run_tests || exit 1
     else
-        make -C build install || exit 1
+        cmake --build build --target test || exit 1
     fi
 fi
 

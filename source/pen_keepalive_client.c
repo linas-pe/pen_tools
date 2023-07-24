@@ -19,14 +19,13 @@
 #include <stdio.h>
 #include <sys/wait.h>
 
-#include <pen_event.h>
-#include <pen_options.h>
-#include <pen_signal.h>
-#include <pen_log.h>
-#include <pen_socket.h>
-#include <pen_timer.h>
-#include <pen_aes.h>
-#include <pen_profile.h>
+#include <pen_utils/pen_options.h>
+#include <pen_utils/pen_profile.h>
+#include <pen_socket/pen_event.h>
+#include <pen_socket/pen_signal.h>
+#include <pen_socket/pen_socket.h>
+#include <pen_socket/pen_timer.h>
+#include <pen_crypt/pen_aes.h>
 
 #define PEN_CMD "/data/usr/bin/pen_update_ip"
 
@@ -115,11 +114,44 @@ _on_ip_changed(uint32_t ip)
     return wstatus == 0;
 }
 
+static inline void
+_send_auth_data(pen_event_base_t *eb)
+{
+    pen_aes_data_t data;
+    data.llu_[0] = time(NULL);
+    data.u_[2] = 0x1c2b8695;
+    data.u_[3] = 0;
+
+    pen_crypt_aes_encrypt(enkey, &data);
+    pen_assert2(write(eb->fd_, (void*)&data, sizeof(data)) == sizeof(data));
+}
+
+static bool
+_on_write(pen_event_base_t *eb)
+{
+    if (eb->user_ == NULL) {
+        PEN_INFO("connect to server.");
+        pen_assert2(pen_set_keepalive(eb->fd_, 3, 60, 20));
+        _send_auth_data(eb);
+        eb->user_ = (void*)1;
+    }
+    return true;
+}
+
 static void
-_on_read(pen_event_base_t *eb)
+_on_event(pen_event_base_t *eb, uint16_t pe)
 {
     uint64_t buf[3];
     pen_aes_data_t *data;
+
+    if (pe == PEN_EVENT_CLOSE)
+        return _on_close(eb);
+
+    if (pe & PEN_EVENT_WRITE)
+        _on_write(eb);
+
+    if ((pe & PEN_EVENT_READ) == 0)
+        return;
 
     int ret = read(eb->fd_, buf, sizeof(buf));
     if (ret == 0)
@@ -138,30 +170,6 @@ _on_read(pen_event_base_t *eb)
     return;
 error:
     _on_close(eb);
-}
-
-static inline void
-_send_auth_data(pen_event_base_t *eb)
-{
-    pen_aes_data_t data;
-    data.llu_[0] = time(NULL);
-    data.u_[2] = 0x1c2b8695;
-    data.u_[3] = 0;
-
-    pen_crypt_aes_encrypt(enkey, &data);
-    pen_assert2(write(eb->fd_, (void*)&data, sizeof(data)) == sizeof(data));
-}
-
-static bool
-_on_write(pen_event_base_t *eb)
-{
-    if (eb->wbuf_ == NULL) {
-        PEN_INFO("connect to server.");
-        pen_assert2(pen_set_keepalive(eb->fd_, 3, 60, 20));
-        _send_auth_data(eb);
-        eb->wbuf_ = (pen_write_buffer_t*)1;
-    }
-    return true;
 }
 
 static void
@@ -184,9 +192,7 @@ _start_connector(pen_event_base_t *eb)
     pen_assert2(pen_set_sockopt(eb->fd_, SO_RCVBUF, sizeof(uint64_t) * 3));
     pen_assert2(pen_set_sockopt(eb->fd_, SO_SNDBUF, sizeof(uint64_t) * 3));
 
-    eb->on_close_ = _on_close;
-    eb->on_read_ = _on_read;
-    eb->on_write_ = _on_write;
+    eb->on_event_ = _on_event;
 
     pen_assert2(pen_event_add_rw(ev, eb));
 }

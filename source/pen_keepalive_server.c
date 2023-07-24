@@ -18,15 +18,14 @@
 #include <signal.h>
 #include <stdio.h>
 
-#include <pen_event.h>
-#include <pen_options.h>
-#include <pen_listener.h>
-#include <pen_memory_pool.h>
-#include <pen_signal.h>
-#include <pen_log.h>
-#include <pen_socket.h>
-#include <pen_aes.h>
-#include <pen_profile.h>
+#include <pen_utils/pen_options.h>
+#include <pen_utils/pen_profile.h>
+#include <pen_utils/pen_memory_pool.h>
+#include <pen_socket/pen_event.h>
+#include <pen_socket/pen_listener.h>
+#include <pen_socket/pen_signal.h>
+#include <pen_socket/pen_socket.h>
+#include <pen_crypt/pen_aes.h>
 
 typedef struct {
     pen_event_base_t eb_;
@@ -98,12 +97,15 @@ _on_client_ip_changed(pen_client_t *self)
 }
 
 static void
-_on_read(pen_event_base_t *eb)
+_on_event(pen_event_base_t *eb, uint16_t pe)
 {
     uint64_t buf[3];
     pen_client_t *self = (pen_client_t*)eb;
     pen_aes_data_t *data;
     int idx;
+
+    if (pe == PEN_EVENT_CLOSE)
+        return _on_close(eb);
 
     int ret = read(eb->fd_, buf, sizeof(buf));
     if (ret == 0)
@@ -132,7 +134,7 @@ error:
     _on_close(eb);
 }
 
-static bool
+static pen_event_base_t *
 on_new_client(pen_event_t ev,
               pen_socket_t fd,
               void *user PEN_UNUSED,
@@ -147,12 +149,11 @@ on_new_client(pen_event_t ev,
     pen_assert2(pen_set_sockopt(fd, SO_SNDBUF, sizeof(uint64_t) * 3));
 
     eb->fd_ = fd;
-    eb->on_read_ = _on_read;
-    eb->on_close_ = _on_close;
+    eb->on_event_= _on_event;
     client->ip_ = addr->sin_addr.s_addr;
 
     pen_assert2(pen_event_add_r(ev, eb));
-    return true;
+    return eb;
 }
 
 static void

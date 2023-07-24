@@ -17,12 +17,11 @@
 #include <signal.h>
 #include <stdio.h>
 
-#include <pen_log.h>
-#include <pen_event.h>
-#include <pen_signal.h>
-#include <pen_options.h>
-#include <pen_memory_pool.h>
-#include <pen_listener.h>
+#include <pen_utils/pen_options.h>
+#include <pen_utils/pen_memory_pool.h>
+#include <pen_socket/pen_event.h>
+#include <pen_socket/pen_signal.h>
+#include <pen_socket/pen_listener.h>
 
 #define PING "ping"
 #define PING_SIZE sizeof(PING) - 1
@@ -67,16 +66,18 @@ _on_close(pen_event_base_t *eb)
 }
 
 static void
-_on_read(pen_event_base_t *eb)
+_on_event(pen_event_base_t *eb, uint16_t ev)
 {
     int ret;
     pen_client_t *self = (pen_client_t *)eb;
+
+    if (ev == PEN_EVENT_CLOSE)
+        return _on_close(eb);
+
     ret = read(eb->fd_, self->buf_ + self->offset_, PING_SIZE - self->offset_);
 
-    if (ret <= 0) {
-        _on_close(eb);
-        return;
-    }
+    if (ret <= 0)
+        return _on_close(eb);
 
     self->offset_ += ret;
     if (self->offset_ < PING_SIZE)
@@ -88,7 +89,7 @@ _on_read(pen_event_base_t *eb)
     pen_assert2(write(eb->fd_, "pong", 4) == 4);
 }
 
-static bool
+static pen_event_base_t *
 on_new_client(pen_event_t ev,
               pen_socket_t fd,
               void *user PEN_UNUSED,
@@ -99,12 +100,11 @@ on_new_client(pen_event_t ev,
     self = pen_memory_pool_get(pool);
     pen_assert2(self != NULL);
     self->eb_.fd_ = fd;
-    self->eb_.on_read_ = _on_read;
-    self->eb_.on_close_ = _on_close;
+    self->eb_.on_event_ = _on_event;
 
     pen_assert2(pen_event_add_r(ev, (pen_event_base_t*)self));
 
-    return true;
+    return &self->eb_;
 }
 
 static void

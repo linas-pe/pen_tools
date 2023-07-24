@@ -18,13 +18,12 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <pen_log.h>
-#include <pen_event.h>
-#include <pen_signal.h>
-#include <pen_options.h>
-#include <pen_socket.h>
-#include <pen_speed.h>
-#include <pen_timer.h>
+#include <pen_utils/pen_options.h>
+#include <pen_socket/pen_event.h>
+#include <pen_socket/pen_signal.h>
+#include <pen_socket/pen_socket.h>
+#include <pen_socket/pen_timer.h>
+#include <pen_test/pen_speed.h>
 
 #define PONG "pong"
 #define PONG_SIZE sizeof(PONG) - 1
@@ -46,9 +45,7 @@ typedef struct {
     bool connected_;
 } pen_connector_t;
 
-static void _on_close(pen_event_base_t *);
-static void _on_read(pen_event_base_t *);
-static bool _on_write(pen_event_base_t *);
+static void _on_event(pen_event_base_t *, uint16_t);
 
 static void
 create_connector(pen_event_t ev, pen_connector_t *self, pen_speed_t *speeder)
@@ -56,9 +53,7 @@ create_connector(pen_event_t ev, pen_connector_t *self, pen_speed_t *speeder)
     pen_assert2(pen_connect_tcp(&self->eb_, host, port));
 
     self->ev_ = ev;
-    self->eb_.on_read_ = _on_read;
-    self->eb_.on_write_ = _on_write;
-    self->eb_.on_close_ = _on_close;
+    self->eb_.on_event_ = _on_event;
     self->speeder_ = speeder;
 
     pen_assert2(pen_event_add_rw(ev, (pen_event_base_t*)self));
@@ -126,13 +121,34 @@ _on_close(pen_event_base_t *eb)
     create_connector(ev, self, speeder);
 }
 
+static bool
+_on_write(pen_event_base_t *eb)
+{
+    pen_connector_t *self = (pen_connector_t *)eb;
+    if (self->connected_)
+        return true;
+    self->connected_ = true;
+    pen_assert2(write(eb->fd_, "ping", 4) == 4);
+    pen_assert2(pen_event_mod_r(self->ev_, eb));
+    return true;
+}
+
 static void
-_on_read(pen_event_base_t *eb)
+_on_event(pen_event_base_t *eb, uint16_t pe)
 {
     int ret;
     pen_connector_t *self = (pen_connector_t *)eb;
-    ret = read(eb->fd_, self->buf_ + self->offset_, PONG_SIZE - self->offset_);
 
+    if (pe == PEN_EVENT_CLOSE)
+        return _on_close(eb);
+
+    if (pe & PEN_EVENT_WRITE)
+        _on_write(eb);
+
+    if ((pe & PEN_EVENT_READ) == 0)
+        return;
+
+    ret = read(eb->fd_, self->buf_ + self->offset_, PONG_SIZE - self->offset_);
     if (ret <= 0) {
         PEN_WARN("read error!!!");
         _on_close(eb);
@@ -153,18 +169,6 @@ _on_read(pen_event_base_t *eb)
         _on_close(eb);
     else
         pen_assert2(write(eb->fd_, "ping", 4) == 4);
-}
-
-static bool
-_on_write(pen_event_base_t *eb)
-{
-    pen_connector_t *self = (pen_connector_t *)eb;
-    if (self->connected_)
-        return true;
-    self->connected_ = true;
-    pen_assert2(write(eb->fd_, "ping", 4) == 4);
-    pen_assert2(pen_event_mod_r(self->ev_, eb));
-    return true;
 }
 
 static void

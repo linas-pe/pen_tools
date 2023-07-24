@@ -19,12 +19,11 @@
 #include <errno.h>
 #include <signal.h>
 
-#include <pen_event.h>
-#include <pen_socket.h>
-#include <pen_listener.h>
-#include <pen_log.h>
-#include <pen_signal.h>
-#include <pen_options.h>
+#include <pen_socket/pen_event.h>
+#include <pen_socket/pen_socket.h>
+#include <pen_socket/pen_listener.h>
+#include <pen_socket/pen_signal.h>
+#include <pen_utils/pen_options.h>
 
 static bool running = true;
 static uint16_t port = 1234;
@@ -47,13 +46,6 @@ _on_signal(int sig PEN_UNUSED)
 {
     fflush(NULL);
     running = false;
-}
-
-static void
-on_close(pen_event_base_t *eb)
-{
-    PEN_INFO("client closed.");
-    free(eb);
 }
 
 static void
@@ -84,7 +76,19 @@ end:
     free(eb);
 }
 
-static bool
+static void
+_on_event(pen_event_base_t *eb, uint16_t pe)
+{
+    if (pe == PEN_EVENT_CLOSE) {
+        PEN_INFO("client closed.");
+        free(eb);
+        return;
+    }
+    do_client(eb);
+}
+
+
+static pen_event_base_t *
 on_new_client(pen_event_t ev,
               pen_socket_t fd,
               void *user PEN_UNUSED,
@@ -94,12 +98,11 @@ on_new_client(pen_event_t ev,
 
     eb = calloc(1, sizeof(*eb));
     eb->fd_ = fd;
-    eb->on_read_ = do_client;
-    eb->on_close_ = on_close;
+    eb->on_event_ = _on_event;
 
     pen_assert2(pen_event_add_r(ev, eb));
 
-    return true;
+    return eb;
 }
 
 static void

@@ -1,0 +1,27 @@
+if (NOT DEFINED ENV{PEN_FILE_SERVER})
+    message(FATAL_ERROR "Unknown upload url")
+endif()
+
+get_filename_component(file_name ${PEN_UPLOAD_FILE_NAME} NAME ABSOLUTE)
+message(STATUS "Uploading ${file_name} ...")
+
+set(secret $ENV{UPLOAD_SECRET})
+set(pen_args "name=${file_name}&version=${VERSION}&secret=${secret}")
+set(pen_url https://$ENV{PEN_FILE_SERVER}/api/file?${pen_args})
+
+set(retry 3)
+while(retry)
+    math(EXPR retry "${retry} - 1")
+    file(UPLOAD ${PEN_UPLOAD_FILE_NAME} ${pen_url} STATUS upload_status)
+    list(GET upload_status 0 STATUS_CODE)
+    list(GET upload_status 1 ERROR_MESSAGE)
+    if (${STATUS_CODE} EQUAL 0)
+        message(STATUS "Upload ${file_name} successfully.")
+        break()
+    elseif(retry)
+        message(STATUS "Upload terminated: ${ERROR_MESSAGE}, retries left: ${retry}")
+    else()
+        message(FATAL_ERROR "Upload ${file_name} failed: ${ERROR_MESSAGE}")
+    endif()
+endwhile()
+

@@ -51,5 +51,4 @@ m4
 build
 pen.m4
 *~
-pen.cmake
 include/pen_config.h
