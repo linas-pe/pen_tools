@@ -12,6 +12,7 @@ endif()
 
 pen_package_check_target(pen_crypt pen_keepalive_server)
 pen_package_check_target(pen_test pen_ping)
+pen_package_check_target(pen_thread pen_ping)
 
 install(TARGETS
     pen_echo
