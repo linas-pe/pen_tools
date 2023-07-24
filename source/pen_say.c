@@ -18,11 +18,10 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <pen_log.h>
-#include <pen_event.h>
-#include <pen_signal.h>
-#include <pen_options.h>
-#include <pen_socket.h>
+#include <pen_utils/pen_options.h>
+#include <pen_socket/pen_event.h>
+#include <pen_socket/pen_signal.h>
+#include <pen_socket/pen_socket.h>
 
 #define DATA \
     "CONNECT registry-1.docker.io:443 HTTP/1.1\r\n" \
@@ -39,18 +38,14 @@ typedef struct {
     bool connected_;
 } pen_connector_t;
 
-static void _on_close(pen_event_base_t *);
-static void _on_read(pen_event_base_t *);
-static bool _on_write(pen_event_base_t *);
+static void _on_event(pen_event_base_t *, uint16_t);
 
 static void
 create_connector(pen_event_t ev, pen_connector_t *self)
 {
     pen_assert2(pen_connect_tcp(&self->eb_, host, port));
 
-    self->eb_.on_read_ = _on_read;
-    self->eb_.on_write_ = _on_write;
-    self->eb_.on_close_ = _on_close;
+    self->eb_.on_event_ = _on_event;
 
     pen_assert2(pen_event_add_rw(ev, (pen_event_base_t*)self));
 }
@@ -96,22 +91,6 @@ _on_close(pen_event_base_t *eb)
     running = false;
 }
 
-static void
-_on_read(pen_event_base_t *eb)
-{
-    static char buf[10240];
-    int ret = read(eb->fd_, buf, sizeof(buf) - 1);
-
-    if (ret <= 0) {
-        PEN_WARN("read error!!!");
-        _on_close(eb);
-        return;
-    }
-
-    buf[ret] = '\0';
-    printf("%s\n", buf);
-}
-
 static bool
 _on_write(pen_event_base_t *eb)
 {
@@ -123,6 +102,32 @@ _on_write(pen_event_base_t *eb)
     self->connected_ = true;
     pen_assert2(write(eb->fd_, DATA, DATA_SIZE) == DATA_SIZE);
     return true;
+}
+
+static void
+_on_event(pen_event_base_t *eb, uint16_t pe)
+{
+    static char buf[10240];
+
+    if (pe == PEN_EVENT_CLOSE)
+        return _on_close(eb);
+
+    if (pe & PEN_EVENT_WRITE)
+        _on_write(eb);
+
+    if ((pe & PEN_EVENT_READ) == 0)
+        return;
+
+    int ret = read(eb->fd_, buf, sizeof(buf) - 1);
+
+    if (ret <= 0) {
+        PEN_WARN("read error!!!");
+        _on_close(eb);
+        return;
+    }
+
+    buf[ret] = '\0';
+    printf("%s\n", buf);
 }
 
 int
